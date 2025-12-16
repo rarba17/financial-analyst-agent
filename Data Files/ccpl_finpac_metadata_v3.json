@@ -1,0 +1,1038 @@
+{
+  "database_name": "ccpl_finpac",
+  "description": "Company Consumer Products Limited (CCPL) Financial Pack - P&L data across different time aggregations and regions",
+  "domain_context": {
+    "company": "Company Consumer Products Limited (CCPL)",
+    "business_type": "Consumer products company with operations across India, SAARC, GAUM, LATAM, and Indonesia",
+    "data_purpose": "Financial performance tracking and analysis across different geographies and time periods",
+    "currency_logic": "Non-Indian businesses shown in both local currency (LC/CC) and INR . Default to INR unless explicitly requested otherwise. INR conversion uses simple average of opening and closing FX rates.",
+    "reporting_types": {
+      "reported": "Current period exactly as booked vs. last period exactly as booked",
+      "organic": "Like-for-like comparison that strips out sold/acquired businesses for clean growth comparison"
+    },
+    "financial_hierarchy": [
+      "gross_sales (GSV)",
+      "net_sales_ind_as (NSV - True revenue after trade discounts)",
+      "gross_contribution_gc_of_gsv (GC - GSV minus COGS)",
+      "throughput (GC minus BTL - unavoidable margin once you sell)",
+      "net_contribution_nc (Throughput minus ATL and VC)",
+      "operational_ebitda_nsv (NC minus Fixed O/H plus Other Income)",
+      "ebitda",
+      "ebit",
+      "profit_before_tax",
+      "profit_after_tax"
+    ]
+  },
+  "table_selection_rules": {
+    "time_period_mapping": {
+      "monthly": {
+        "primary_table": "ftm",
+        "indicators": ["month", "monthly", "FTM", "for the month", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+      },
+      "quarterly": {
+        "primary_table": "quarter",
+        "indicators": ["quarter", "quarterly", "Q1", "Q2", "Q3", "Q4"],
+        "selection_logic": "When user specifies quarter (Q1, Q2, Q3, Q4) without 'to date', use quarter table by default"
+      },
+      "quarter_to_date": {
+        "primary_table": "qtd", 
+        "indicators": ["quarter to date", "QTD", "quarterly cumulative", "quarter cumulative", "this quarter to date"]
+      },
+      "year_to_date": {
+        "primary_table": "ytd",
+        "indicators": ["year to date", "YTD", "annual cumulative", "year cumulative", "this year to date"]
+      },
+      "full_year": {
+        "primary_table": "fy",
+        "indicators": ["full year", "FY", "annual", "yearly", "entire year"]
+      },
+      "half_yearly": {
+        "primary_table": "half",
+        "indicators": ["half year", "H1", "H2", "half yearly", "semi annual"]
+      }
+    },
+    "table_precedence": {
+      "explicit_table_mention": "If user explicitly mentions table name (e.g., 'from quarter table'), use that table",
+      "time_period_keywords": "If user mentions Q1/Q2/Q3/Q4 without 'to date', default to quarter table",
+      "cumulative_keywords": "If user mentions 'to date', 'cumulative', or 'YTD'/'QTD', use respective cumulative tables",
+      "default_fallback": "If no clear indicators, default to ftm for monthly data"
+    }
+  },
+  "column_resolution_rules": {
+    "pattern_application": {
+      "ftm": {
+        "default_column": "{metric_name}",
+        "percentage_column": "{metric_name}_pct_nsv",
+        "selection_logic": "Use base metric name unless user specifically asks for percentage"
+      },
+      "qtd": {
+        "default_column": "{metric_name}_qtd_val",
+        "budget_column": "{metric_name}_qtd_aop",
+        "growth_column": "{metric_name}_qtd_aop_iya",
+        "selection_logic": "Default to _qtd_val for actual values. Use _qtd_aop for budget/AOP/plan queries. Use _qtd_aop_iya for year-over-year/growth queries"
+      },
+      "ytd": {
+        "default_column": "{metric_name}__val",
+        "budget_column": "{metric_name}__aop",
+        "growth_column": "{metric_name}__aop_iya",
+        "selection_logic": "Default to __val for actual values. Use __aop for budget/AOP/plan queries. Use __aop_iya for year-over-year/growth queries"
+      },
+      "quarter": {
+        "default_column": "{metric_name}_aop",
+        "growth_column": "{metric_name}_aop_iya",
+        "selection_logic": "Default to _aop for budget values (quarter table only has budget data). Use _aop_iya for year-over-year/growth queries"
+      },
+      "fy": {
+        "default_column": "{metric_name}_val",
+        "budget_column": "{metric_name}_aop",
+        "growth_column": "{metric_name}_aop_iya",
+        "selection_logic": "Default to _val for actual values. Use _aop for budget/AOP/plan queries. Use _aop_iya for year-over-year/growth queries"
+      },
+      "half": {
+        "default_column": "{metric_name}_aop_iya",
+        "growth_column": "{metric_name}_aop_iya",
+        "selection_logic": "Half table only has growth indices (_aop_iya). Used for half-yearly year-over-year comparisons"
+      }
+    },
+    "keyword_mapping": {
+      "actual_indicators": ["actual", "real", "achieved", "current"],
+      "budget_indicators": ["budget", "AOP", "plan", "target", "budgeted"],
+      "growth_indicators": ["growth", "YoY", "year over year", "vs last year", "compared to last year", "iya", "index"]
+    }
+  },
+  "query_translation_examples": {
+    "example_queries": [
+      {
+        "natural_language": "Show me net sales for India Q3 2024",
+        "correct_sql": "SELECT quarter, net_sales_ind_as_aop AS value FROM quarter WHERE year = 2024 AND quarter = 'Q3' AND region IN ('CCPL India Cluster','India Standalone')",
+        "explanation": "Q3 indicator maps to quarter table, which only has budget data (_aop suffix)"
+      },
+      {
+        "natural_language": "Show me net sales for India Q3 2024 from quarter table",
+        "correct_sql": "SELECT quarter, net_sales_ind_as_aop AS value FROM quarter WHERE year = 2024 AND quarter = 'Q3' AND region IN ('CCPL India Cluster','India Standalone')",
+        "explanation": "Quarter table only has budget data, so use _aop suffix"
+      },
+      {
+        "natural_language": "What was actual net sales QTD for India in Oct 2024?",
+        "correct_sql": "SELECT month, net_sales_ind_as_qtd_val AS value FROM qtd WHERE year = 2024 AND month = 'Oct' region IN ('CCPL India Cluster','India Standalone')",
+        "explanation": "QTD table with 'actual' keyword maps to _qtd_val suffix"
+      },
+      {
+        "natural_language": "Show me Q3 2024 net sales quarter to date",
+        "correct_sql": "SELECT month, net_sales_ind_as_qtd_val AS value FROM qtd WHERE year = 2024 AND month IN ('Jul','Aug','Sep')",
+        "explanation": "'quarter to date' explicitly indicates QTD table"
+      },
+      {
+        "natural_language": "How did EBITDA grow YTD vs last year?",
+        "correct_sql": "SELECT month, ebitda__aop_iya AS value FROM ytd",
+        "explanation": "Growth/YoY queries use _aop_iya suffix for year-over-year index"
+      },
+      {
+        "natural_language": "Show budget vs actual EBITDA QTD",
+        "correct_sql": "SELECT month, ebitda_qtd_val AS actual, ebitda_qtd_aop AS budget FROM qtd",
+        "explanation": "Budget vs actual requires both _qtd_val and _qtd_aop columns"
+      }
+    ]
+  },
+  "tables": [
+    {
+      "name": "ftm",
+      "description": "For-The-Month (FTM) P&L data - Monthly financial performance metrics",
+      "time_granularity": "monthly",
+      "primary_keys": ["year", "month", "region", "pnl_type", "currency"],
+      "natural_language_aliases": [
+        "monthly data",
+        "month-wise",
+        "FTM",
+        "monthly performance",
+        "monthly P&L",
+        "current month"
+      ],
+      "base_metrics": [
+        "gross_domestic_sales",
+        "gross_export_sales",
+        "gross_sales",
+        "less_temporary_price_reduction_tpr",
+        "net_sales_igaap",
+        "less_ind_as_btl_adjustment",
+        "net_sales_ind_as",
+        "cost_of_goods_sold",
+        "gross_contribution_gc_of_gsv",
+        "gross_contribution_gc_forex_of_gsv",
+        "throughput",
+        "atl",
+        "working_media",
+        "btl_incl_tpr_ind_as_btl_adj",
+        "total_a_p_spends",
+        "net_contribution_nc",
+        "manpower_expenses_ex_plvr_lti",
+        "lti",
+        "plvr",
+        "total_manpower",
+        "non_manpower_expenses",
+        "total_fixed_overheads",
+        "other_operating_income",
+        "operational_ebitda_nsv",
+        "fx_gain_loss",
+        "inter_co_re_charges_income_expenses",
+        "other_income_expenses",
+        "operational_ebitda_forex_nsv",
+        "operational_ebitda_forex_working_media_nsv",
+        "ebitda",
+        "depreciation",
+        "ebit",
+        "net_interest_cost",
+        "interest_income",
+        "interest_expense",
+        "profit_before_tax",
+        "exceptional_income_expense",
+        "taxation",
+        "current_tax",
+        "deferred_tax",
+        "profit_after_tax",
+        "profit_after_tax_w_o_exceptional",
+        "uvg"
+      ],
+      "column_patterns": {
+        "absolute_value": "{metric_name}",
+        "percentage_of_nsv": "{metric_name}_pct_nsv"
+      },
+      "key_columns": [
+        {
+          "name": "year",
+          "type": "integer",
+          "description": "Financial year",
+          "sample_values": [2023, 2024],
+          "natural_language_aliases": ["year", "FY", "financial year"]
+        },
+        {
+          "name": "month",
+          "type": "string",
+          "description": "Month name",
+          "sample_values": ["Oct", "Nov", "Dec"],
+          "natural_language_aliases": ["month", "monthly"]
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "description": "Business cluster/geography",
+          "sample_values": ["Company Indonesia", "LATAM", "GAUM"],
+          "natural_language_aliases": [
+            "region",
+            "cluster",
+            "geography",
+            "market"
+          ]
+        },
+        {
+          "name": "pnl_type",
+          "type": "string",
+          "description": "Type of P&L reporting",
+          "sample_values": ["Reported", "Organic"],
+          "natural_language_aliases": ["reporting type", "P&L type"],
+          "domain_mapping": {
+            "Reported": "Current period vs last period as booked",
+            "Organic": "Like-for-like comparison excluding acquisitions/divestments"
+          }
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "description": "Currency of reporting",
+          "sample_values": ["INR"],
+          "natural_language_aliases": ["currency", "reporting currency"]
+        }
+      ],
+      "metric_definitions": {
+        "gross_domestic_sales": {
+          "description": "Gross domestic sales value",
+          "unit": "currency_units",
+          "natural_language_aliases": ["domestic sales", "local sales"],
+          "business_definition": "Sales within the domestic market"
+        },
+        "gross_export_sales": {
+          "description": "Gross export sales value",
+          "unit": "currency_units",
+          "natural_language_aliases": ["export sales", "international sales"],
+          "business_definition": "Sales to international markets"
+        },
+        "gross_sales": {
+          "description": "Gross Sales Value (GSV) - Invoice value to distributors before any discount",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "gross sales",
+            "GSV",
+            "total sales",
+            "gross revenue"
+          ],
+          "business_definition": "Invoice value to distributors before any discount"
+        },
+        "less_temporary_price_reduction_tpr": {
+          "description": "Temporary Price Reduction adjustments",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "TPR",
+            "price reduction",
+            "temporary discounts"
+          ],
+          "business_definition": "Short-term promotional price reductions"
+        },
+        "net_sales_igaap": {
+          "description": "Net Sales under Indian GAAP",
+          "unit": "currency_units",
+          "natural_language_aliases": ["IGAAP sales", "Indian GAAP sales"],
+          "business_definition": "Net sales calculated per Indian GAAP standards"
+        },
+        "less_ind_as_btl_adjustment": {
+          "description": "Ind AS BTL adjustment",
+          "unit": "currency_units",
+          "natural_language_aliases": ["BTL adjustment", "Ind AS adjustment"],
+          "business_definition": "Below-the-line adjustments for Ind AS compliance"
+        },
+        "net_sales_ind_as": {
+          "description": "Net Sales (NSV) under Ind AS - True revenue after trade discounts",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "net sales",
+            "NSV",
+            "revenue",
+            "sales",
+            "net revenue"
+          ],
+          "business_definition": "True revenue after trade discounts; use this for 'sales' answers"
+        },
+        "cost_of_goods_sold": {
+          "description": "Cost of Goods Sold (COGS) - Direct material, packaging and labour",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "COGS",
+            "cost of goods sold",
+            "direct costs",
+            "material costs"
+          ],
+          "business_definition": "Direct material, packaging and labour costs"
+        },
+        "gross_contribution_gc_of_gsv": {
+          "description": "Gross Contribution (GC) - GSV minus COGS",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "gross contribution",
+            "GC",
+            "gross margin"
+          ],
+          "business_definition": "GSV minus COGS; GC % = GC ÷ GSV"
+        },
+        "gross_contribution_gc_forex_of_gsv": {
+          "description": "Gross Contribution including forex impact",
+          "unit": "currency_units",
+          "natural_language_aliases": ["GC forex", "gross contribution forex"],
+          "business_definition": "Gross contribution adjusted for foreign exchange impact"
+        },
+        "throughput": {
+          "description": "Throughput - GC minus BTL; margin you cannot avoid once you decide to sell",
+          "unit": "currency_units",
+          "natural_language_aliases": ["throughput", "unavoidable margin"],
+          "business_definition": "GC minus BTL; effectively the margin you cannot avoid once you decide to sell"
+        },
+        "atl": {
+          "description": "Above The Line (ATL) - Brand advertising spend",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "ATL",
+            "above the line",
+            "brand advertising",
+            "advertising spend"
+          ],
+          "business_definition": "Brand advertising spend"
+        },
+        "working_media": {
+          "description": "Working Media - Airtime spend component of ATL",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "working media",
+            "airtime spend",
+            "media spend"
+          ],
+          "business_definition": "Airtime spend; Non-working covers production and agency fees"
+        },
+        "btl_incl_tpr_ind_as_btl_adj": {
+          "description": "Below The Line (BTL) including TPR - Trade spend and incentives",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "BTL",
+            "below the line",
+            "trade spend",
+            "trade incentives"
+          ],
+          "business_definition": "Incentives given to distributors and retailers"
+        },
+        "total_a_p_spends": {
+          "description": "Total A&P (Advertising & Promotion) spends",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "A&P spend",
+            "advertising promotion",
+            "total marketing spend"
+          ],
+          "business_definition": "Combined advertising and promotional expenditure"
+        },
+        "net_contribution_nc": {
+          "description": "Net Contribution (NC) - Throughput minus ATL and VC",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "net contribution",
+            "NC",
+            "contribution margin"
+          ],
+          "business_definition": "Throughput minus ATL and VC; lowest level that can be broken out by brand or category"
+        },
+        "manpower_expenses_ex_plvr_lti": {
+          "description": "Manpower expenses excluding PLVR and LTI",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "base manpower",
+            "salary costs excluding bonuses"
+          ],
+          "business_definition": "Basic salary and wage costs excluding performance bonuses and long-term incentives"
+        },
+        "lti": {
+          "description": "Long Term Incentives",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "LTI",
+            "long term incentives",
+            "retention bonuses"
+          ],
+          "business_definition": "Long-term retention and incentive schemes"
+        },
+        "plvr": {
+          "description": "Performance Linked Variable Remuneration",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "PLVR",
+            "performance bonus",
+            "variable pay"
+          ],
+          "business_definition": "Performance-linked variable compensation"
+        },
+        "total_manpower": {
+          "description": "Total Manpower costs - Salaries, PLVR bonus and one-off retention schemes",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "manpower",
+            "salary costs",
+            "employee costs",
+            "staff costs"
+          ],
+          "business_definition": "Salaries, PLVR bonus and one-off retention schemes"
+        },
+        "non_manpower_expenses": {
+          "description": "Non-manpower expenses - Rent, utilities, supply-chain admin",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "non-manpower",
+            "overhead",
+            "operating expenses",
+            "admin costs"
+          ],
+          "business_definition": "All other indirect operating costs (rent, utilities, supply-chain admin)"
+        },
+        "total_fixed_overheads": {
+          "description": "Total Fixed Overheads - Manpower plus non-manpower costs",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "fixed overheads",
+            "total overheads",
+            "fixed costs"
+          ],
+          "business_definition": "Manpower plus non-manpower expenses"
+        },
+        "other_operating_income": {
+          "description": "Other Operating Income - Sundry items like scrap sales",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "other income",
+            "sundry income",
+            "miscellaneous income"
+          ],
+          "business_definition": "Sundry items like scrap sales"
+        },
+        "operational_ebitda_nsv": {
+          "description": "Operational EBITDA - Net Contribution minus Fixed O/H plus Other Income",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "operational EBITDA",
+            "EBITDA",
+            "operating profit"
+          ],
+          "business_definition": "Net Contribution minus Fixed O/H plus Other Income"
+        },
+        "fx_gain_loss": {
+          "description": "Foreign exchange gains/losses",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "forex gain loss",
+            "FX impact",
+            "currency impact"
+          ],
+          "business_definition": "Impact of foreign exchange rate movements"
+        },
+        "inter_co_re_charges_income_expenses": {
+          "description": "Inter-company recharges income and expenses",
+          "unit": "currency_units",
+          "natural_language_aliases": ["inter-company charges", "recharges"],
+          "business_definition": "Income and expenses related to inter-company transactions"
+        },
+        "other_income_expenses": {
+          "description": "Other income and expenses",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "other income expenses",
+            "miscellaneous P&L items"
+          ],
+          "business_definition": "Other non-operating income and expense items"
+        },
+        "operational_ebitda_forex_nsv": {
+          "description": "Operational EBITDA including forex impact",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "EBITDA forex",
+            "operational EBITDA with FX"
+          ],
+          "business_definition": "Operational EBITDA adjusted for foreign exchange impact"
+        },
+        "operational_ebitda_forex_working_media_nsv": {
+          "description": "EBITDA + Working Media - Adds back Working Media as brand equity investment",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "EBITDA plus working media",
+            "EBITDA + WM"
+          ],
+          "business_definition": "Adds back Working Media, which CCPL treats as an 'investment' in brand equity"
+        },
+        "ebitda": {
+          "description": "EBITDA - Earnings before interest, tax, depreciation and amortization",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "EBITDA",
+            "earnings before interest tax depreciation amortization"
+          ]
+        },
+        "depreciation": {
+          "description": "Depreciation expense",
+          "unit": "currency_units",
+          "natural_language_aliases": ["depreciation", "depreciation expense"]
+        },
+        "ebit": {
+          "description": "EBIT - Earnings before interest and tax",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "EBIT",
+            "earnings before interest tax",
+            "operating profit"
+          ]
+        },
+        "net_interest_cost": {
+          "description": "Net Interest Cost - Interest expense minus interest income",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "net interest cost",
+            "interest cost",
+            "net interest expense"
+          ]
+        },
+        "interest_income": {
+          "description": "Interest Income",
+          "unit": "currency_units",
+          "natural_language_aliases": ["interest income", "interest earned"]
+        },
+        "interest_expense": {
+          "description": "Interest Expense",
+          "unit": "currency_units",
+          "natural_language_aliases": ["interest expense", "interest paid"]
+        },
+        "profit_before_tax": {
+          "description": "Profit Before Tax (PBT)",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "PBT",
+            "profit before tax",
+            "pre-tax profit"
+          ]
+        },
+        "exceptional_income_expense": {
+          "description": "Exceptional income and expenses",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "exceptional items",
+            "one-time items",
+            "extraordinary items"
+          ],
+          "business_definition": "Non-recurring income and expense items"
+        },
+        "taxation": {
+          "description": "Tax expense",
+          "unit": "currency_units",
+          "natural_language_aliases": ["tax", "taxation", "tax expense"]
+        },
+        "current_tax": {
+          "description": "Current tax expense",
+          "unit": "currency_units",
+          "natural_language_aliases": ["current tax", "immediate tax liability"]
+        },
+        "deferred_tax": {
+          "description": "Deferred tax expense/benefit",
+          "unit": "currency_units",
+          "natural_language_aliases": ["deferred tax", "tax timing differences"]
+        },
+        "profit_after_tax": {
+          "description": "Profit After Tax (PAT) - Net profit",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "PAT",
+            "profit after tax",
+            "net profit",
+            "bottom line"
+          ],
+          "business_definition": "Final profit after all expenses and taxes"
+        },
+        "profit_after_tax_w_o_exceptional": {
+          "description": "PAT excluding exceptional items",
+          "unit": "currency_units",
+          "natural_language_aliases": [
+            "PAT without exceptional",
+            "underlying profit",
+            "normalized PAT"
+          ],
+          "business_definition": "Net profit excluding one-time exceptional items"
+        },
+        "uvg": {
+          "description": "Underlying Volume Growth - Units growth percentage",
+          "unit": "percentage",
+          "natural_language_aliases": ["UVG", "volume growth", "unit growth"],
+          "business_definition": "Underlying Volume Growth (units)"
+        }
+      }
+    },
+    {
+      "name": "qtd",
+      "description": "Quarter-To-Date (QTD) P&L data - Cumulative performance within the quarter",
+      "time_granularity": "quarter_to_date",
+      "primary_keys": ["year", "month", "region", "pnl_type", "currency"],
+      "natural_language_aliases": [
+        "quarter to date",
+        "QTD",
+        "quarterly cumulative",
+        "quarter cumulative",
+        "this quarter"
+      ],
+      "column_patterns": {
+        "actual_qtd_value": "{metric_name}_qtd_val",
+        "budget_qtd_value": "{metric_name}_qtd_aop",
+        "year_over_year_index": "{metric_name}_qtd_aop_iya"
+      },
+      "column_types": {
+        "qtd_val": "Actual quarter-to-date values for the metric",
+        "qtd_aop": "Annual Operating Plan (budget) values for QTD period",
+        "qtd_aop_iya": "Index vs Year Ago - 100 means flat, 95 means -5% year-on-year"
+      },
+      "base_metrics_coverage": "Same 43 base metrics as FTM table, each available in 3 variants: _qtd_val, _qtd_aop, _qtd_aop_iya",
+      "key_columns": [
+        {
+          "name": "year",
+          "type": "integer",
+          "description": "Financial year",
+          "natural_language_aliases": ["year", "FY", "financial year"]
+        },
+        {
+          "name": "month",
+          "type": "string",
+          "description": "Month within quarter (last month of QTD period)",
+          "natural_language_aliases": ["month", "quarter end month"]
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "description": "Business cluster/geography",
+          "sample_values": ["India Standalone"],
+          "natural_language_aliases": [
+            "region",
+            "cluster",
+            "geography",
+            "market"
+          ]
+        },
+        {
+          "name": "pnl_type",
+          "type": "string",
+          "description": "Type of P&L reporting",
+          "natural_language_aliases": ["reporting type", "P&L type"]
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "sample_values": ["INR"],
+          "description": "Currency of reporting",
+          "natural_language_aliases": ["currency", "reporting currency"]
+        }
+      ]
+    },
+    {
+      "name": "ytd",
+      "description": "Year-To-Date (YTD) P&L data - Cumulative performance from start of financial year",
+      "time_granularity": "year_to_date",
+      "primary_keys": ["year", "month", "region", "pnl_type", "currency"],
+      "natural_language_aliases": [
+        "year to date",
+        "YTD",
+        "annual cumulative",
+        "year cumulative",
+        "this year"
+      ],
+      "column_patterns": {
+        "actual_ytd_value": "{metric_name}__val",
+        "budget_ytd_value": "{metric_name}__aop",
+        "year_over_year_index": "{metric_name}__aop_iya"
+      },
+      "column_types": {
+        "__val": "Actual year-to-date values for the metric",
+        "__aop": "Annual Operating Plan (budget) values for YTD period",
+        "__aop_iya": "Index vs Year Ago - 100 means flat, 95 means -5% year-on-year"
+      },
+      "base_metrics_coverage": "Same 43 base metrics as FTM table, each available in 3 variants: __val, __aop, __aop_iya",
+      "key_columns": [
+        {
+          "name": "year",
+          "type": "integer",
+          "description": "Financial year",
+          "natural_language_aliases": ["year", "FY", "financial year"]
+        },
+        {
+          "name": "month",
+          "type": "string",
+          "description": "Month within year (last month of YTD period)",
+          "natural_language_aliases": ["month", "year end month"]
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "description": "Business cluster/geography",
+          "sample_values": ["India Standalone"],
+          "natural_language_aliases": [
+            "region",
+            "cluster",
+            "geography",
+            "market"
+          ]
+        },
+        {
+          "name": "pnl_type",
+          "type": "string",
+          "description": "Type of P&L reporting",
+          "natural_language_aliases": ["reporting type", "P&L type"]
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "sample_values": ["INR"],
+          "description": "Currency of reporting",
+          "natural_language_aliases": ["currency", "reporting currency"]
+        }
+      ]
+    },
+    {
+      "name": "quarter",
+      "description": "Quarterly P&L data - Complete quarter performance with AOP comparisons",
+      "time_granularity": "quarterly",
+      "primary_keys": ["year", "quarter", "region", "pnl_type", "currency"],
+      "natural_language_aliases": ["quarterly", "quarter", "Q1", "Q2", "Q3"],
+      "column_patterns": {
+        "budget_quarter_value": "{metric_name}_aop",
+        "year_over_year_index": "{metric_name}_aop_iya"
+      },
+      "column_types": {
+        "_aop": "Annual Operating Plan (budget) values for the quarter",
+        "_aop_iya": "Index vs Year Ago - 100 means flat, 95 means -5% year-on-year"
+      },
+      "important_note": "Quarter table ONLY contains budget data (_aop) and growth indices (_aop_iya). No actual values available.",
+      "base_metrics_coverage": "Same 43 base metrics as FTM table, each available in 2 variants: _aop, _aop_iya",
+      "key_columns": [
+        {
+          "name": "year",
+          "type": "integer",
+          "description": "Financial year",
+          "natural_language_aliases": ["year", "FY", "financial year"]
+        },
+        {
+          "name": "quarter",
+          "type": "string",
+          "description": "Quarter identifier",
+          "sample_values": ["Q1", "Q2", "Q3"],
+          "natural_language_aliases": ["quarter", "Q1", "Q2", "Q3"]
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "description": "Business cluster/geography",
+          "sample_values": ["Ghana"],
+          "natural_language_aliases": [
+            "region",
+            "cluster",
+            "geography",
+            "market"
+          ]
+        },
+        {
+          "name": "pnl_type",
+          "type": "string",
+          "description": "Type of P&L reporting",
+          "natural_language_aliases": ["reporting type", "P&L type"]
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "sample_values": ["INR"],
+          "description": "Currency of reporting",
+          "natural_language_aliases": ["currency", "reporting currency"]
+        }
+      ]
+    },
+    {
+      "name": "fy",
+      "description": "Full Year (FY) P&L data - Complete annual performance with actual vs budget comparisons",
+      "time_granularity": "annual",
+      "primary_keys": ["year", "region", "pnl_type", "currency"],
+      "natural_language_aliases": [
+        "full year",
+        "FY",
+        "annual",
+        "yearly",
+        "entire year"
+      ],
+      "column_patterns": {
+        "actual_fy_value": "{metric_name}_val",
+        "budget_fy_value": "{metric_name}_aop",
+        "year_over_year_index": "{metric_name}_aop_iya"
+      },
+      "column_types": {
+        "_val": "Actual full year values for the metric",
+        "_aop": "Annual Operating Plan (budget) values for full year",
+        "_aop_iya": "Index vs Year Ago - 100 means flat, 95 means -5% year-on-year"
+      },
+      "base_metrics_coverage": "Same base metrics as other tables, each available in 3 variants: _val, _aop, _aop_iya",
+      "key_columns": [
+        {
+          "name": "year",
+          "type": "integer",
+          "description": "Financial year",
+          "natural_language_aliases": ["year", "FY", "financial year"]
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "description": "Business cluster/geography",
+          "natural_language_aliases": [
+            "region",
+            "cluster",
+            "geography",
+            "market"
+          ]
+        },
+        {
+          "name": "pnl_type",
+          "type": "string",
+          "description": "Type of P&L reporting",
+          "natural_language_aliases": ["reporting type", "P&L type"]
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "description": "Currency of reporting",
+          "natural_language_aliases": ["currency", "reporting currency"]
+        },
+        {
+          "name": "unit",
+          "type": "string",
+          "description": "Unit of measurement",
+          "natural_language_aliases": ["unit", "measurement unit"]
+        }
+      ]
+    },
+    {
+      "name": "half",
+      "description": "Half-yearly P&L data - H1/H2 performance with year-over-year growth indices",
+      "time_granularity": "half_yearly",
+      "primary_keys": ["year", "half", "region", "pnl_type", "currency"],
+      "natural_language_aliases": [
+        "half year",
+        "H1",
+        "H2", 
+        "half yearly",
+        "semi annual"
+      ],
+      "column_patterns": {
+        "year_over_year_index": "{metric_name}_aop_iya"
+      },
+      "column_types": {
+        "_aop_iya": "Index vs Year Ago - 100 means flat, 95 means -5% year-on-year"
+      },
+      "important_note": "Half table ONLY contains growth indices (_aop_iya). Used exclusively for half-yearly year-over-year comparisons.",
+      "base_metrics_coverage": "Same base metrics as other tables, each available only as _aop_iya variant",
+      "key_columns": [
+        {
+          "name": "year",
+          "type": "integer",
+          "description": "Financial year",
+          "natural_language_aliases": ["year", "FY", "financial year"]
+        },
+        {
+          "name": "half",
+          "type": "string",
+          "description": "Half year identifier",
+          "sample_values": ["H1", "H2"],
+          "natural_language_aliases": ["half", "H1", "H2", "first half", "second half"]
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "description": "Business cluster/geography",
+          "natural_language_aliases": [
+            "region",
+            "cluster",
+            "geography",
+            "market"
+          ]
+        },
+        {
+          "name": "pnl_type",
+          "type": "string",
+          "description": "Type of P&L reporting",
+          "natural_language_aliases": ["reporting type", "P&L type"]
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "description": "Currency of reporting",
+          "natural_language_aliases": ["currency", "reporting currency"]
+        },
+        {
+          "name": "unit",
+          "type": "string",
+          "description": "Unit of measurement", 
+          "natural_language_aliases": ["unit", "measurement unit"]
+        }
+      ]
+    }
+  ],
+  "business_metrics": {
+    "growth_metrics": {
+      "UVG": "Underlying Volume Growth (units)",
+      "UPG": "Underlying Price Growth",
+      "USG": "Sales Growth; mathematically UVG × UPG",
+      "IYA": "Index vs Year Ago; 100 means flat, 95 means -5% year-on-year"
+    },
+    "profitability_hierarchy": [
+      "gross_sales",
+      "net_sales_ind_as",
+      "gross_contribution_gc_of_gsv",
+      "throughput",
+      "net_contribution_nc",
+      "operational_ebitda_nsv",
+      "ebitda",
+      "ebit",
+      "profit_before_tax",
+      "profit_after_tax"
+    ],
+    "key_ratios": {
+      "gross_margin": "gross_contribution_gc_of_gsv / gross_sales",
+      "ebitda_margin": "ebitda / net_sales_ind_as",
+      "net_margin": "profit_after_tax / net_sales_ind_as"
+    }
+  },
+  "query_patterns": {
+    "time_references": {
+      "current_month": "Latest month in FTM table",
+      "current_quarter": "Latest quarter in Quarter table",
+      "current_year": "Latest year across all tables",
+      "year_over_year": "Compare same period across different years using IYA metrics",
+      "quarter_over_quarter": "Compare sequential quarters",
+      "month_over_month": "Compare sequential months in FTM"
+    },
+    "common_questions": [
+      "What was the revenue/sales in [period]?",
+      "How did EBITDA perform in [period]?",
+      "What is the growth rate for [metric]?",
+      "Compare [metric] between [period1] and [period2]",
+      "What are the margins for [region]?",
+      "Show me profitability trends",
+      "How are we performing vs budget/AOP?",
+      "What is the volume growth?",
+      "Break down costs by category"
+    ]
+  },
+  "natural_language_processing": {
+    "metric_synonyms": {
+      "sales": ["revenue", "net sales", "NSV", "net_sales_ind_as", "turnover"],
+      "profit": [
+        "earnings",
+        "PAT",
+        "profit_after_tax",
+        "net profit",
+        "bottom line"
+      ],
+      "margin": ["profitability", "percentage", "ratio"],
+      "growth": ["increase", "decrease", "change", "trend", "performance"],
+      "costs": ["expenses", "spend", "expenditure", "outgo"],
+      "advertising": [
+        "ATL",
+        "marketing",
+        "brand spend",
+        "working media",
+        "A&P"
+      ],
+      "overheads": ["fixed costs", "indirect costs", "admin costs"],
+      "contribution": ["gross contribution", "net contribution", "GC", "NC"]
+    },
+    "time_period_detection": {
+      "monthly": ["month", "monthly", "FTM", "for the month"],
+      "quarterly": ["quarter", "quarterly", "Q1", "Q2", "Q3", "Q4"],
+      "ytd": ["year to date", "YTD", "annual", "this year"],
+      "qtd": ["quarter to date", "QTD", "this quarter"],
+      "full_year": ["full year", "FY", "annual", "yearly"],
+      "half_yearly": ["half year", "H1", "H2", "semi annual"]
+    },
+    "comparison_indicators": [
+      "vs",
+      "versus",
+      "compared to",
+      "against",
+      "over",
+      "growth",
+      "change",
+      "year over year",
+      "YoY",
+      "quarter over quarter",
+      "QoQ",
+      "month over month",
+      "MoM",
+      "budget",
+      "AOP",
+      "plan",
+      "target"
+    ]
+  },
+  "data_quality_notes": {
+    "missing_values": "Some cells contain empty strings or NaN values",
+    "currency_consistency": "Sample data shows INR for CCPL India Cluster, India Standalone region",
+    "time_coverage": "Data spans multiple financial years with varying coverage by table",
+    "percentage_fields": "FTM table has both absolute values and percentage of NSV for each metric",
+    "column_count": "FTM: 93 columns, QTD: 137 columns, YTD: 137 columns, Quarter: 93 columns, FY: 155 columns, Half: 56 columns"
+  },
+  "advanced_query_capabilities": {
+    "budget_vs_actual": "Use _aop columns for budget comparisons across QTD, YTD, and Quarter tables",
+    "year_over_year": "Use _aop_iya columns showing indexed growth (100 = flat, 95 = -5% YoY)",
+    "cross_table_analysis": "Combine monthly (FTM), quarterly (Quarter), cumulative (QTD/YTD), annual (FY), and half-yearly (Half) views",
+    "regional_comparisons": "Filter and compare across CCPL India Cluster, India Standalone, GAUM, LATAM, Indonesia clusters",
+    "organic_vs_reported": "Toggle between Reported and Organic P&L types for clean growth analysis"
+  }
+}

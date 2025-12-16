@@ -1,0 +1,50 @@
+[tool.poetry]
+name = "demo-app-backend"
+version = "0.1.0"
+description = "FastAPI Chat Application with PostgreSQL"
+authors = ["Dheeraj"]
+packages = [
+  { include = "agent" },
+  { include = "api" },
+  { include = "auth" },
+  { include = "core" },
+  { include = "db" },
+  { include = "models" },
+  { include = "schemas" },
+  { include = "services" },
+  { include = "tools" },
+  { include = "utils" }
+]
+
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = {extras = ["all"], version = "^0.115.12"}
+uvicorn = {extras = ["standard"], version = "^0.34.2"}
+sqlalchemy = "^2.0.40"
+alembic = "^1.15.2"
+python-jose = {extras = ["cryptography"], version = "^3.4.0"}
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+python-multipart = "^0.0.20"
+psycopg2-binary = "^2.9.10"
+python-dotenv = "^1.1.0"
+pydantic-settings = "^2.9.1"
+fastapi-cli = "^0.0.7"
+bcrypt = "4.0.1"
+azure-communication-email = "^1.0.0"
+langchain-openai = "^0.3.27"
+langgraph = "^0.5.0"
+pyodbc = "^5.2.0"
+langchain-mcp-adapters = "^0.1.8"
+pytz = "^2025.2"
+langchain = "^0.3.26"
+langchain-community = "^0.3.27"
+openai = "^1.95.1"
+langchain-postgres = "^0.0.15"
+openai-agents = "^0.1.0"
+psycopg = "^3.2.9"
+redis = "^6.2.0"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
