@@ -148,7 +148,7 @@ postgres_data/
 
 # Environment specific files
 .env.*
-!.env.example 
+!.env.example
 venv-3.12/lib64
 venv-3.12/bin/mako-render
 
@@ -156,6 +156,11 @@ experiment
 
 celerybeat-schedule.db
 myenv/lib64
-flattend.db
+flattened.db
 
 experiment
+
+.agents
+.claude
+.codex
+flattened.db

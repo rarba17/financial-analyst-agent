@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str
 
     # CORS
-    BACKEND_CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+    BACKEND_CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173", "http://localhost:8501"]
 
     # Admin
     ADMIN_EMAIL: str
