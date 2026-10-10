@@ -78,7 +78,7 @@ class QueryOptimizer:
         """
         self.use_llm = use_llm
         if use_llm:
-            self.llm = ChatOpenAI(model=model_name, temperature=0.0)
+            self.llm = ChatOpenAI(model=model_name, temperature=1.0)
     
     def optimize(self, query: str, conversation_history: Optional[List[Dict]] = None) -> Dict[str, any]:
         """

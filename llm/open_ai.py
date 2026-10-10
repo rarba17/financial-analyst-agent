@@ -1,9 +1,6 @@
 import os
-from fastapi import params
 from langchain_openai import ChatOpenAI, AzureChatOpenAI
-from typing import Optional, Dict, Any
-from pydantic import SecretStr
-from sqlalchemy import false
+from typing import Optional
 
 
 class LLMProvider:
@@ -16,7 +13,7 @@ class LLMProvider:
         self,
         model_name: Optional[str] = None,
         in_json: bool = False,
-        temperature=0.7,
+        temperature: float = 1.0,
         streaming=False,
     ):
         """
@@ -28,7 +25,20 @@ class LLMProvider:
             **kwargs: Additional arguments to pass to the underlying LLM
         """
         self.use_azure = os.getenv("USE_AZURE_OPENAI", "false").lower() == "true"
+        self.temperature = self._normalize_temperature(temperature)
         self.llm = self._initialize_llm(model_name, in_json, temperature, streaming)
+
+    @staticmethod
+    def _normalize_temperature(temperature: float) -> float:
+        """
+        Some OpenAI/Azure models only support the default temperature value (1.0).
+        To avoid hard failures, coerce any non-default temperature to 1.0.
+        """
+        try:
+            value = float(temperature)
+        except (TypeError, ValueError):
+            return 1.0
+        return 1.0 if value != 1.0 else value
 
     def _initialize_llm(
         self,
@@ -47,14 +57,14 @@ class LLMProvider:
             return self._initialize_azure_openai(
                 model_name,
                 in_json,
-                temperature,
+                self.temperature,
                 streaming,
             )
         else:
             return self._initialize_openai(
                 model_name,
                 in_json,
-                temperature,
+                self.temperature,
                 streaming,
             )
 
@@ -62,7 +72,7 @@ class LLMProvider:
         self,
         model_name: Optional[str],
         in_json: bool = False,
-        temperature: float = 0.7,
+        temperature: float = 1.0,
         streaming: bool = False,
     ) -> ChatOpenAI:
         """Initialize a ChatOpenAI instance."""
@@ -77,16 +87,16 @@ class LLMProvider:
         if in_json:
             return ChatOpenAI(
                 model=model,
-                # temperature=temperature,
-                api_key=SecretStr(api_key),
+                temperature=temperature,
+                api_key=api_key,
                 model_kwargs={"response_format": {"type": "json_object"}},
                 streaming=streaming,
             )
         else:
             return ChatOpenAI(
                 model=model,
-                # temperature=temperature,
-                api_key=SecretStr(api_key),
+                temperature=temperature,
+                api_key=api_key,
                 streaming=streaming,
             )
 
@@ -94,7 +104,7 @@ class LLMProvider:
         self,
         model_name: Optional[str],
         in_json: bool = False,
-        temperature: float = 0.7,
+        temperature: float = 1.0,
         streaming: bool = False,
     ) -> AzureChatOpenAI:
         """Initialize an AzureChatOpenAI instance."""
@@ -146,7 +156,8 @@ class LLMProvider:
                 azure_deployment=params["deployment_name"],
                 api_version=params["api_version"],
                 azure_endpoint=params["azure_endpoint"],
-                api_key=SecretStr(params["api_key"]),
+                temperature=temperature,
+                api_key=params["api_key"],
                 model_kwargs={"response_format": {"type": "json_object"}},
                 streaming=streaming,
             )
@@ -155,7 +166,8 @@ class LLMProvider:
                 azure_deployment=params["deployment_name"],
                 api_version=params["api_version"],
                 azure_endpoint=params["azure_endpoint"],
-                api_key=SecretStr(params["api_key"]),
+                temperature=temperature,
+                api_key=params["api_key"],
                 streaming=streaming,
             )
 

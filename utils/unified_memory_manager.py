@@ -35,7 +35,7 @@ class UnifiedMemoryManager:
         )
         self.llm_provider = LLMProvider(
             model_name=settings.LLM_MODEL_NAME,
-            temperature=0,
+            temperature=1.0,
         )
         self.llm = self.llm_provider.get_llm()
 
