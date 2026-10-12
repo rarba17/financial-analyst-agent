@@ -28,7 +28,12 @@ from tools import (
     analyze_time_series,
     find_rankings_extrema,
     compare_regions,
-    analyze_drivers
+    analyze_drivers,
+    query_qtd_ytd,
+    query_budget_variance,
+    query_yoy_growth,
+    query_fy_half,
+    query_margin,
 )
 
 load_dotenv()
@@ -36,7 +41,7 @@ load_dotenv()
 
 class GCPLFinancialAgent:
     """
-    Standalone agent for GCPL financial data analysis with 5 specialized tools
+    Standalone agent for GCPL financial data analysis with 10 specialized tools
     Supports WebSocket streaming via ai_message_id
     """
 
@@ -103,27 +108,71 @@ class GCPLFinancialAgent:
 {business_prompt}
 
 AVAILABLE TOOLS:
-You have access to 5 specialized tools:
+You have access to 10 specialized tools:
 
 1. **query_basic_metrics**: For single-value retrieval (simple queries)
    - Use when: User asks for one metric, one region, one period
    - Example: "What was India's Net Sales in December 2024?"
+   - Supports multi-metric wide-fetch via `metrics=[...]` (Total+Domestic+Exports in ONE call)
 
-2. **analyze_time_series**: For MoM changes, trends, rolling averages
+2. **analyze_time_series**: For MoM changes, trends, rolling averages, YoY/SPLY
    - Use when: User asks about changes over time, trends, rolling averages
    - Example: "What's the MoM change in EBITDA from Feb to Mar 2025?"
+   - analysis_type='yoy_sply' for "vs last year"; SPLY delta is always attached
 
 3. **find_rankings_extrema**: For finding peaks, valleys, best/worst months
    - Use when: User asks "which month had highest/lowest" or "peak" or "minimum"
    - Example: "Which month shows peak EBITDA for India?"
+   - Margin form: metric="ebitda/net_sales_ind_as"; NULLs excluded; pnl_type='both' OK
 
 4. **compare_regions**: For cross-region comparisons and rankings
    - Use when: User wants to compare multiple regions for same period
    - Example: "Rank India, Indonesia, and Africa by Net Sales in March 2025"
+   - Margin mode: metric_b="net_sales_ind_as". Mixed-currency totals are BLOCKED
+     unless convert_to='INR' is passed (DB pre-applied rates, no live FX).
 
 5. **analyze_drivers**: For complex analysis (waterfalls, driver attribution, mix)
    - Use when: User asks about "drivers", "decomposition", "waterfall", "mix analysis"
    - Example: "What are the top drivers of EBITDA change?"
+   - Components are inferred from the P&L hierarchy for ANY target (not just EBITDA/PBT).
+     mix_intensity accepts regions=[...] (N regions). fx_impact works cross-year.
+
+6. **query_qtd_ytd**: For cumulative "to date" questions (table=qtd|ytd)
+   - Use when: User says QTD, YTD, "to date", cumulative
+   - lens: val (actual) | aop (budget) | aop_iya (index)
+   - Example: "QTD Net Sales Mar 2025 India?"
+
+7. **query_budget_variance**: For Actual vs budget/AOP gaps
+   - Use when: User says budget, AOP, target, variance, gap
+   - table: qtd|ytd|quarter|fy. NOTE: quarter is budget-ONLY (no actuals by schema):
+     answer N/A + offer ftm month-sum estimate with disclaimer, never hallucinate.
+
+8. **query_yoy_growth**: For YoY growth / SPLY / index reads
+   - Use when: User says YoY, growth, SPLY, "vs last year", index/_iya
+   - Reads stored index where present, else computes (curr-sply)/sply.
+
+9. **query_fy_half**: For full-year / half-year questions
+   - Use when: User says FY, annual, full year, H1, H2
+   - NOTE: half-year is index-only; FY covers 2023/2024/2025 sparsely.
+
+10. **query_margin**: For first-class margin/ratio queries
+    - Use when: User asks margin, %, ratio, intensity
+    - ALWAYS present numerator ABS + denominator ABS + % together.
+    - Pass regions=[...] for margin ranks.
+
+TABLE ROUTING (from metadata table_selection_rules):
+- monthly point-in-time -> ftm tools (1-5, 10)
+- "to date"/cumulative -> query_qtd_ytd
+- budget/AOP/variance -> query_budget_variance
+- YoY/growth/index -> query_yoy_growth
+- FY/annual/H1/H2 -> query_fy_half
+- margin/ratio/rank -> query_margin preferred over hand-division
+
+COVERAGE (Data Files/distincts.json):
+- ftm months: Oct-Dec 2023, Jan-Mar 2024, Oct-Dec 2024, Jan-Mar 2025. Apr-Sep: NO ROWS.
+- qtd/ytd: Oct-Dec 2024 + Jan-Mar 2025 only. quarter: Q1-Q3 only (budget-only). No Q4.
+- Missing periods -> answer N/A + nearest available window + why. Never invent numbers.
+- Units: normalize to Rs Cr for INR views; preserve raw unit in Sources.
 
 WORKFLOW:
 1. Understand the user's question (refer to chat history for context)
@@ -161,13 +210,18 @@ REMEMBER:
     def _build_agent(self) -> AgentExecutor:
         """Build the LangChain agent with all 5 specialized tools"""
 
-        # All 5 specialized tools
+        # All 10 specialized tools
         tools = [
             query_basic_metrics,
             analyze_time_series,
             find_rankings_extrema,
             compare_regions,
-            analyze_drivers
+            analyze_drivers,
+            query_qtd_ytd,
+            query_budget_variance,
+            query_yoy_growth,
+            query_fy_half,
+            query_margin,
         ]
 
         # Create prompt
@@ -185,7 +239,7 @@ REMEMBER:
             agent=agent,
             tools=tools,
             verbose=True,
-            max_iterations=5,
+            max_iterations=12,
             early_stopping_method="generate"
         )
 
