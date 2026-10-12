@@ -43,11 +43,20 @@ Agent: → Selects the right tool → Executes SQL against the financial databas
 │   ├── standalone_agent.py  # GCPLFinancialAgent class
 │   └── cli.py               # Interactive CLI interface
 ├── tools/
+│   ├── _helpers.py          # shared region/currency/period/unit resolvers
+│   ├── REGION_ALIASES.json  # semantic region map (India, LATAM, Africa, ...)
 │   ├── basic_metrics.py     # query_basic_metrics tool
 │   ├── time_series.py       # analyze_time_series tool
 │   ├── rankings_extrema.py  # find_rankings_extrema tool
 │   ├── region_comparison.py # compare_regions tool
-│   └── driver_analysis.py   # analyze_drivers tool
+│   ├── driver_analysis.py   # analyze_drivers tool
+│   ├── cumulative.py        # query_qtd_ytd tool (QTD/YTD)
+│   ├── budget_actual.py     # query_budget_variance tool (AOP gaps)
+│   ├── growth.py            # query_yoy_growth tool (YoY/SPLY)
+│   ├── annual.py            # query_fy_half tool (FY/H1/H2)
+│   └── margins.py           # query_margin tool (first-class margins)
+├── tests/
+│   └── test_agent_regression.py  # 24-case regression bank (a.md §6)
 ├── services/
 │   ├── agent_service.py     # Agent invocation service
 │   ├── chat_status_service.py
@@ -77,15 +86,31 @@ Agent: → Selects the right tool → Executes SQL against the financial databas
 
 ## Agent Tools
 
-The agent selects from 5 specialized tools based on query type:
+The agent selects from 10 specialized tools based on query type
+(see `a.md` capability audit for the full question bank):
 
 | Tool | Use Case | Example |
 |---|---|---|
-| `query_basic_metrics` | Single value retrieval | "What was India's Net Sales in Dec 2024?" |
-| `analyze_time_series` | MoM/YoY trends, rolling averages | "What's the MoM change in EBITDA from Feb to Mar 2025?" |
-| `find_rankings_extrema` | Peaks, valleys, best/worst periods | "Which month had peak EBITDA for India?" |
-| `compare_regions` | Cross-region comparisons | "Rank India, Indonesia, and GAUM by Net Sales in Mar 2025" |
-| `analyze_drivers` | Waterfall analysis, driver attribution | "What are the top drivers of EBITDA change?" |
+| `query_basic_metrics` | Single/multi-value point-in-time retrieval (wide-fetch siblings in one SQL) | "What was India's Net Sales in Dec 2024?" |
+| `analyze_time_series` | MoM/YoY trends, rolling averages, always-on SPLY | "What's the MoM change in EBITDA from Feb to Mar 2025?" |
+| `find_rankings_extrema` | Peaks, valleys, best/worst periods (NULL-safe, margin expressions) | "Which month had peak EBITDA for India?" |
+| `compare_regions` | Cross-region comparisons (single-currency guard, margin mode) | "Rank India, Indonesia, and GAUM by Net Sales in Mar 2025" |
+| `analyze_drivers` | Waterfall, driver attribution, N-region mix, cross-year FX | "What are the top drivers of EBITDA change?" |
+| `query_qtd_ytd` | Cumulative QTD/YTD actuals, budgets, indices | "QTD Net Sales Mar 2025 India?" |
+| `query_budget_variance` | Actual vs AOP gaps (quarter is budget-only by schema) | "Actual vs budget NSV Mar 2025?" |
+| `query_yoy_growth` | YoY growth / stored index / SPLY compute | "NSV Dec 2024 vs Dec 2023?" |
+| `query_fy_half` | Full-year / half-year (half is index-only) | "FY24 Net Sales?" |
+| `query_margin` | First-class margins: numerator ₹ + denominator ₹ + % | "EBITDA margin India Dec 2024?" |
+
+Shared resolvers live in `tools/_helpers.py`, grounded in the frozen
+`Data Files/distincts.json` snapshot (30 regions, 13 currencies).
+
+### Coverage & missing-data contract
+
+- `ftm` months: Oct–Dec 2023, Jan–Mar 2024, Oct–Dec 2024, Jan–Mar 2025. **Apr–Sep have no rows.**
+- `qtd`/`ytd`: Oct–Dec 2024 + Jan–Mar 2025 only. `quarter`: Q1–Q3 budgets only (no actuals). No Q4.
+- Missing-period questions are answered **N/A + nearest available window** — numbers are never hallucinated.
+- Cross-currency totals are never summed silently; compares carry a currency note or coverage warning.
 
 ---
 
